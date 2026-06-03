@@ -16,7 +16,7 @@
 
 var API_URL  = 'https://gcp2.net/api/getcurrentnetvar';
 var BEARER   = 'Bearer 5|M1bz2cXL3YLdmuArrI2KaySF0Cl8UxtiDznzK7Mk';
-var POLL_MS  = 180000;
+var POLL_MS  = 60000;
 var RETRY_MS = 5000;
 var EASE     = 0.08;
 var CLICK_URL = '';
@@ -247,10 +247,6 @@ function gcpdot_initialize(id)
 			}
 			this.graphics.initialize(this.element);
 			setInterval(function(){ self.animateDot(); }, 75);
-			window.addEventListener('focus', function() {
-				self.getData();
-				self.animateDot();
-			});
 			window.addEventListener('resize', function() {
 				self.graphics.relayout();
 				self.animateDot();
@@ -297,6 +293,7 @@ function gcpdot_initialize(id)
 					var raw = (data && data.netvar && data.netvar[0]) ? data.netvar[0].netvar : undefined;
 					var idx = mapNetvarToBand(raw);
 					if(idx !== null) {
+						console.log('Success: value = ' + raw + ' (band ' + idx + ')');
 						self.hasSucceeded = true;
 						if(self.toIndex === null) {
 							self.fromIndex = idx;
@@ -307,12 +304,14 @@ function gcpdot_initialize(id)
 							self.toIndex = idx;
 							self.progress = 0;
 						}
+					} else {
+						console.log('Failed: no usable value (got ' + raw + ')');
 					}
 					self.isRetrieving = false;
 					self.scheduleNext();
 				})
 				.catch(function(err){
-					console.error('NetVar fetch error:', err);
+					console.log('NetVar failed: ' + err.message);
 					self.isRetrieving = false;
 					self.scheduleNext();
 				});
