@@ -5,8 +5,9 @@
 	<meta name="ROBOTS" content="NOINDEX">
 	<title>NetVar Dot</title>
 	<style>
-		html, body { margin: 0; padding: 0; height: 100%; }
-		#dotdiv { width: 100%; height: 100%; }
+		html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+		#dotdiv { width: 100%; height: 100%; overflow: hidden; }
+		#dotdiv canvas { display: block; }
 	</style>
 </head>
 <body>
@@ -47,12 +48,13 @@ function gcpdot_initialize(id)
 		progress : 1,
 		hasSucceeded : false,
 		pollTimer : null,
+		resizeTimer : null,
 
 		graphics : {
 			gscalar: 1,
 			bscalar: 1,
 			element : null,
-			canvas : null,
+			canvasEl : null,
 			context : null,
 			size : 0,
 			offsetX : 0,
@@ -83,77 +85,86 @@ function gcpdot_initialize(id)
 				],
 			initialize : function(element)
 			{
-				this.gscalar = window.devicePixelRatio || 1;
 				this.element = element;
-
+				this.canvasEl = document.createElement('canvas');
+				element.appendChild(this.canvasEl);
+				this.relayout();
+				this.build();
+			},
+			relayout : function()
+			{
+				this.gscalar = window.devicePixelRatio || 1;
+				var element = this.element;
 				var w = element.offsetWidth, h = element.offsetHeight;
 				var size = Math.min(w, h);
 				this.size = size;
 				this.offsetX = (w - size) / 2;
 				this.offsetY = (h - size) / 2;
-				var scalarSizing = size/48.0;
-				var highlightBlurX = Math.round(3.7*scalarSizing * this.gscalar);
-				var highlightBlurY = Math.round(1.1*scalarSizing * this.gscalar);
-				var blurBlock = highlightBlurX + ' ' + highlightBlurY;
-				var shadowBlur = 1.1*scalarSizing * this.gscalar;
-				var img, svg;
 
-				this.canvas = document.createElement('canvas');
-				this.canvas.width = w;
-				this.canvas.height = h;
-				this.context = this.canvas.getContext('2d');
+				this.context = this.canvasEl.getContext('2d');
 				this.bscalar = this.context.webkitBackingStorePixelRatio ||
-                            this.context.mozBackingStorePixelRatio ||
-                            this.context.msBackingStorePixelRatio ||
-                            this.context.oBackingStorePixelRatio ||
-                            this.context.backingStorePixelRatio || 1;
+							this.context.mozBackingStorePixelRatio ||
+							this.context.msBackingStorePixelRatio ||
+							this.context.oBackingStorePixelRatio ||
+							this.context.backingStorePixelRatio || 1;
 
-				if(this.gscalar != this.bscalar)
-				{	
-					var ratio = this.gscalar / this.bscalar;
-					this.canvas.style.width = w + 'px';
-					this.canvas.style.height = h + 'px';
-					this.canvas.width = w * ratio;
-					this.canvas.height = h * ratio;
-					this.context.scale(ratio, ratio);
-				}
-
-				var self = this;
-
-				element.appendChild(this.canvas);
-				this.canvas = this.canvas.getContext("2d");
-				for(i = 0; i < this.dotElements.length; i++)
-				{
-					svg = this.dotSVG.replace("__ID__", 'svgel'+i).replace("__HBLUR__", blurBlock).
-						replace("__C1__", this.dotElements[i].color1).replace("__C2__", this.dotElements[i].color2).
-						replace("__WIDTH__", size * this.gscalar).replace("__HEIGHT__", size * this.gscalar);
-
-					img = this.dotImages[i] = new Image();
-					img.width = size * this.gscalar;
-					img.height = size * this.gscalar;
-					this.dotImages[i].isImgLoaded = false;
-					(f=function(i){
-						self.dotImages[i].onload = function() { self.dotImages[i].isImgLoaded = true; };
-					})(i);
-					this.dotImages[i].src = "data:image/svg+xml;base64,"+btoa(svg);
-					//element.appendChild(this.dotImages[i]);
-					if(i == 0) {
-						svg = this.shadowSVG.replace("__SHADOWBLUR__", shadowBlur).replace("__SHADOWBLUR__", shadowBlur).
-						replace("__WIDTH__", size * this.gscalar).replace("__HEIGHT__", size * this.gscalar);
-						img = this.shadowImage = new Image();
-						img.width = size * this.gscalar;
-						img.height = size * this.gscalar;
-						this.shadowImage.isImgLoaded = false;
-						this.shadowImage.onload = function() {
-							self.shadowImage.isImgLoaded = true;
-							self.renderLoading();
-						};
-						this.shadowImage.src = "data:image/svg+xml;base64,"+btoa(svg);
-					}
-				}
-
+				var ratio = this.gscalar / this.bscalar;
+				this.canvasEl.style.width = w + 'px';
+				this.canvasEl.style.height = h + 'px';
+				this.canvasEl.width = Math.max(1, Math.round(w * ratio));
+				this.canvasEl.height = Math.max(1, Math.round(h * ratio));
+				this.context.setTransform(ratio, 0, 0, ratio, 0, 0);
+				this.lastKey = null;
 			},
-			// Spinner shown until the first value arrives.
+			build : function()
+			{
+				var self = this;
+				var size = this.size, gscalar = this.gscalar;
+				var scalarSizing = size/48.0;
+				var highlightBlurX = Math.round(3.7*scalarSizing * gscalar);
+				var highlightBlurY = Math.round(1.1*scalarSizing * gscalar);
+				var blurBlock = highlightBlurX + ' ' + highlightBlurY;
+				var shadowBlur = 1.1*scalarSizing * gscalar;
+
+				var newDots = [];
+				var newShadow;
+				var pending = this.dotElements.length + 1;
+				var finalize = function() {
+					if(--pending > 0) return;
+					self.dotImages = newDots;
+					self.shadowImage = newShadow;
+					self.lastKey = null;
+				};
+
+				for(var i = 0; i < this.dotElements.length; i++)
+				{
+					var svg = this.dotSVG.replace("__ID__", 'svgel'+i).replace("__HBLUR__", blurBlock).
+						replace("__C1__", this.dotElements[i].color1).replace("__C2__", this.dotElements[i].color2).
+						replace("__WIDTH__", size * gscalar).replace("__HEIGHT__", size * gscalar);
+
+					var img = newDots[i] = new Image();
+					img.width = size * gscalar;
+					img.height = size * gscalar;
+					img.isImgLoaded = false;
+					(function(im){
+						im.onload = function() { im.isImgLoaded = true; finalize(); };
+					})(img);
+					img.src = "data:image/svg+xml;base64,"+btoa(svg);
+				}
+
+				var ssvg = this.shadowSVG.replace("__SHADOWBLUR__", shadowBlur).replace("__SHADOWBLUR__", shadowBlur).
+					replace("__WIDTH__", size * gscalar).replace("__HEIGHT__", size * gscalar);
+				newShadow = new Image();
+				newShadow.width = size * gscalar;
+				newShadow.height = size * gscalar;
+				newShadow.isImgLoaded = false;
+				newShadow.onload = function() { newShadow.isImgLoaded = true; finalize(); };
+				newShadow.src = "data:image/svg+xml;base64,"+btoa(ssvg);
+			},
+			resize : function()
+			{
+				this.build();
+			},
 			renderLoading : function()
 			{
 				if(!this.shadowImage || !this.shadowImage.isImgLoaded ||
@@ -163,6 +174,7 @@ function gcpdot_initialize(id)
 				var w = this.element.offsetWidth, h = this.element.offsetHeight;
 				var size = this.size, ox = this.offsetX, oy = this.offsetY;
 				this.context.save();
+				this.context.globalCompositeOperation = 'source-over';
 				this.context.fillStyle = 'rgba(255, 255, 255, 0)';
 				this.context.clearRect(0, 0, w, h);
 				this.context.globalAlpha = 1.0;
@@ -199,16 +211,18 @@ function gcpdot_initialize(id)
 				var w = this.element.offsetWidth, h = this.element.offsetHeight;
 				var size = this.size, ox = this.offsetX, oy = this.offsetY;
 				this.context.save();
-				this.context.fillStyle = 'rgba(255, 255, 255, 0)';
 				this.context.clearRect(0, 0, w, h);
+				this.context.globalCompositeOperation = 'source-over';
 				this.context.globalAlpha = 1.0;
-				this.context.drawImage(this.shadowImage, 0, 0, this.shadowImage.width, this.shadowImage.height, ox, oy, size, size);
-
 				this.context.drawImage(imgFrom, 0, 0, imgFrom.width, imgFrom.height, ox, oy, size, size);
 				if(fromIndex !== toIndex && progress > 0) {
 					this.context.globalAlpha = progress;
+					this.context.globalCompositeOperation = 'source-atop';
 					this.context.drawImage(imgTo, 0, 0, imgTo.width, imgTo.height, ox, oy, size, size);
 				}
+				this.context.globalAlpha = 1.0;
+				this.context.globalCompositeOperation = 'destination-over';
+				this.context.drawImage(this.shadowImage, 0, 0, this.shadowImage.width, this.shadowImage.height, ox, oy, size, size);
 				this.context.restore();
 			},
 			animateScalar : function(s)
@@ -237,6 +251,12 @@ function gcpdot_initialize(id)
 				self.getData();
 				self.animateDot();
 			});
+			window.addEventListener('resize', function() {
+				self.graphics.relayout();
+				self.animateDot();
+				clearTimeout(self.resizeTimer);
+				self.resizeTimer = setTimeout(function(){ self.graphics.build(); }, 150);
+			});
 			this.getData();
 		},
 		scheduleNext : function()
@@ -249,7 +269,7 @@ function gcpdot_initialize(id)
 		animateDot : function()
 		{
 			if(this.toIndex === null) {
-				this.graphics.renderLoading(); // loading until the first value arrives
+				this.graphics.renderLoading();
 				return;
 			}
 			if(this.progress < 1) {
