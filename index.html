@@ -17,7 +17,7 @@
 var API_URL  = 'https://gcp2.net/api/getcurrentnetvar';
 var BEARER   = 'Bearer 5|M1bz2cXL3YLdmuArrI2KaySF0Cl8UxtiDznzK7Mk';
 var POLL_MS  = 60000;
-var RETRY_MS = 5000;
+var RETRY_MS = 10000;
 var EASE     = 0.08;
 var CLICK_URL = '';
 
@@ -46,7 +46,7 @@ function gcpdot_initialize(id)
 		fromIndex : null,
 		toIndex : null,
 		progress : 1,
-		hasSucceeded : false,
+		lastAttemptSucceeded : false,
 		pollTimer : null,
 		resizeTimer : null,
 
@@ -258,7 +258,7 @@ function gcpdot_initialize(id)
 		scheduleNext : function()
 		{
 			var self = this;
-			var delay = this.hasSucceeded ? POLL_MS : RETRY_MS;
+			var delay = this.lastAttemptSucceeded ? POLL_MS : RETRY_MS;
 			clearTimeout(this.pollTimer);
 			this.pollTimer = setTimeout(function(){ self.getData(); }, delay);
 		},
@@ -294,7 +294,7 @@ function gcpdot_initialize(id)
 					var idx = mapNetvarToBand(raw);
 					if(idx !== null) {
 						console.log('Success: value = ' + raw + ' (band ' + idx + ')');
-						self.hasSucceeded = true;
+						self.lastAttemptSucceeded = true;
 						if(self.toIndex === null) {
 							self.fromIndex = idx;
 							self.toIndex = idx;
@@ -306,12 +306,14 @@ function gcpdot_initialize(id)
 						}
 					} else {
 						console.log('Failed: no usable value (got ' + raw + ')');
+						self.lastAttemptSucceeded = false;
 					}
 					self.isRetrieving = false;
 					self.scheduleNext();
 				})
 				.catch(function(err){
 					console.log('NetVar failed: ' + err.message);
+					self.lastAttemptSucceeded = false;
 					self.isRetrieving = false;
 					self.scheduleNext();
 				});
