@@ -15,9 +15,10 @@
 
 var API_URL  = 'https://gcp2.net/api/getcurrentnetvar';
 var BEARER   = 'Bearer 5|M1bz2cXL3YLdmuArrI2KaySF0Cl8UxtiDznzK7Mk';
-var POLL_MS  = 120000;   // how often to fetch the current netvar
-var EASE     = 0.08;   
-var CLICK_URL = '';    
+var POLL_MS  = 120000;
+var RETRY_MS = 5000;
+var EASE     = 0.08;
+var CLICK_URL = '';
 
 
 
@@ -43,6 +44,8 @@ function gcpdot_initialize(id)
 		fromIndex : null,
 		toIndex : null,
 		progress : 1,
+		hasSucceeded : false,
+		pollTimer : null,
 
 		graphics : {
 			gscalar: 1,
@@ -169,7 +172,6 @@ function gcpdot_initialize(id)
 				this.context.restore();
 				this.lastKey = null;
 			},
-			
 			renderBand : function(fromIndex, toIndex, progress)
 			{
 				var imgFrom = this.dotImages[fromIndex];
@@ -181,7 +183,7 @@ function gcpdot_initialize(id)
 				}
 
 				var key = fromIndex + '-' + toIndex + '-' + progress.toFixed(3);
-				if(key === this.lastKey) return; 
+				if(key === this.lastKey) return;
 				this.lastKey = key;
 
 				var w = this.element.offsetWidth, h = this.element.offsetHeight;
@@ -225,7 +227,13 @@ function gcpdot_initialize(id)
 				self.animateDot();
 			});
 			this.getData();
-			setInterval(function(){ self.getData(); }, POLL_MS);
+		},
+		scheduleNext : function()
+		{
+			var self = this;
+			var delay = this.hasSucceeded ? POLL_MS : RETRY_MS;
+			clearTimeout(this.pollTimer);
+			this.pollTimer = setTimeout(function(){ self.getData(); }, delay);
 		},
 		animateDot : function()
 		{
@@ -258,23 +266,24 @@ function gcpdot_initialize(id)
 					var raw = (data && data.netvar && data.netvar[0]) ? data.netvar[0].netvar : undefined;
 					var idx = mapNetvarToBand(raw);
 					if(idx !== null) {
+						self.hasSucceeded = true;
 						if(self.toIndex === null) {
-							
 							self.fromIndex = idx;
 							self.toIndex = idx;
 							self.progress = 1;
 						} else if(idx !== self.toIndex) {
-						
 							self.fromIndex = self.toIndex;
 							self.toIndex = idx;
 							self.progress = 0;
 						}
 					}
 					self.isRetrieving = false;
+					self.scheduleNext();
 				})
 				.catch(function(err){
 					console.error('NetVar fetch error:', err);
 					self.isRetrieving = false;
+					self.scheduleNext();
 				});
 		}
 	};
