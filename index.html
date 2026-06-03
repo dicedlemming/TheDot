@@ -15,7 +15,7 @@
 
 var API_URL  = 'https://gcp2.net/api/getcurrentnetvar';
 var BEARER   = 'Bearer 5|M1bz2cXL3YLdmuArrI2KaySF0Cl8UxtiDznzK7Mk';
-var POLL_MS  = 120000;
+var POLL_MS  = 180000;
 var RETRY_MS = 5000;
 var EASE     = 0.08;
 var CLICK_URL = '';
@@ -26,12 +26,13 @@ function mapNetvarToBand(netvar)
 {
 	var v = parseFloat(netvar);
 	if (isNaN(v)) return null;
-	if (v < 20)   return 12;
-	if (v < 35)   return 10;
-	if (v <= 180) return 8;
-	if (v <= 255) return 5;
-	if (v <= 280) return 3;
-	return 2;
+	if (v < 7)   return 12;
+	if (v < 15)   return 10;
+	if (v <= 100) return 8;
+	if (v <= 160) return 5;
+	if (v <= 200) return 3;
+	if (v <= 280) return 2;
+	return 14;
 }
 
 
@@ -53,12 +54,15 @@ function gcpdot_initialize(id)
 			element : null,
 			canvas : null,
 			context : null,
+			size : 0,
+			offsetX : 0,
+			offsetY : 0,
 			dotImages : [],
 			shadowImage : null,
 			animateTime : 1000,
 			lastKey : null,
-			dotSVG : "<svg xmlns='http://www.w3.org/2000/svg' id='__ID__' preserveAspectRatio='xMidYMid meet' width='__WIDTH__' height='__HEIGHT__'><defs><filter id='f1'><feGaussianBlur in='SourceGraphic' stdDeviation='__HBLUR__' /></filter><radialGradient id='highlight' cy='5%' r='50%' gradientTransform='translate(-0.25 0) scale(1.5 1)'><stop offset='10%' stop-color='white' stop-opacity='100'/><stop offset='100%' stop-color='white' stop-opacity='0'/></radialGradient><radialGradient id='grad' cy='92%' r='60%' gradientTransform='translate(-0.2 0) scale(1.4 1)'><stop offset='0%' stop-color='__C1__'/><stop offset='100%' stop-color='__C2__'/></radialGradient></defs><circle fill='url(#grad)' cx='50%' cy='45%' r='45%'/><clipPath id='ic'><circle cx='50%' cy='40%' r='37%' /></clipPath><g filter='url(#f1)'><circle fill='url(#highlight)' cx='50%' cy='50%' r='48%' clip-path='url(#ic)' /></g></svg>",
-			shadowSVG : "<svg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMidYMid meet' width='__WIDTH__' height='__HEIGHT__' style='opacity:0.7'><defs><filter id='fh'><feGaussianBlur in='SourceGraphic' stdDeviation='__SHADOWBLUR__ __SHADOWBLUR__' /></filter></defs><circle filter='url(#fh)' fill='black' cx='50%' cy='49%' r='45%'/></svg>",
+			dotSVG : "<svg xmlns='http://www.w3.org/2000/svg' id='__ID__' preserveAspectRatio='xMidYMid meet' width='__WIDTH__' height='__HEIGHT__'><defs><filter id='f1'><feGaussianBlur in='SourceGraphic' stdDeviation='__HBLUR__' /></filter><radialGradient id='highlight' cy='5%' r='50%' gradientTransform='translate(-0.25 0) scale(1.5 1)'><stop offset='10%' stop-color='white' stop-opacity='100'/><stop offset='100%' stop-color='white' stop-opacity='0'/></radialGradient><radialGradient id='grad' cy='92%' r='60%' gradientTransform='translate(-0.2 0) scale(1.4 1)'><stop offset='0%' stop-color='__C1__'/><stop offset='100%' stop-color='__C2__'/></radialGradient></defs><circle fill='url(#grad)' cx='50%' cy='48%' r='45%'/><clipPath id='ic'><circle cx='50%' cy='43%' r='37%' /></clipPath><g filter='url(#f1)'><circle fill='url(#highlight)' cx='50%' cy='53%' r='48%' clip-path='url(#ic)' /></g></svg>",
+			shadowSVG : "<svg xmlns='http://www.w3.org/2000/svg' preserveAspectRatio='xMidYMid meet' width='__WIDTH__' height='__HEIGHT__' style='opacity:0.7'><defs><filter id='fh'><feGaussianBlur in='SourceGraphic' stdDeviation='__SHADOWBLUR__ __SHADOWBLUR__' /></filter></defs><circle filter='url(#fh)' fill='black' cx='50%' cy='52%' r='45%'/></svg>",
 
 			dotElements : [
 					{id: 'gcpdot0',  color1: '#CDCDCD', color2: '#505050'},
@@ -74,7 +78,8 @@ function gcpdot_initialize(id)
 					{id: 'gcpdot10', color1: '#ACF2FF', color2: '#21BCF1'},
 					{id: 'gcpdot11', color1: '#0EEEFF', color2: '#0786E1'},
 					{id: 'gcpdot12', color1: '#24CBFD', color2: '#0000FF'},
-					{id: 'gcpdot13', color1: '#5655CA', color2: '#2400A0'}
+					{id: 'gcpdot13', color1: '#5655CA', color2: '#2400A0'},
+					{id: 'gcpdot14', color1: '#3A3A3A', color2: '#000000'}
 				],
 			initialize : function(element)
 			{
@@ -82,7 +87,11 @@ function gcpdot_initialize(id)
 				this.element = element;
 
 				var w = element.offsetWidth, h = element.offsetHeight;
-				var scalarSizing = Math.min(w, h)/48.0;
+				var size = Math.min(w, h);
+				this.size = size;
+				this.offsetX = (w - size) / 2;
+				this.offsetY = (h - size) / 2;
+				var scalarSizing = size/48.0;
 				var highlightBlurX = Math.round(3.7*scalarSizing * this.gscalar);
 				var highlightBlurY = Math.round(1.1*scalarSizing * this.gscalar);
 				var blurBlock = highlightBlurX + ' ' + highlightBlurY;
@@ -117,11 +126,11 @@ function gcpdot_initialize(id)
 				{
 					svg = this.dotSVG.replace("__ID__", 'svgel'+i).replace("__HBLUR__", blurBlock).
 						replace("__C1__", this.dotElements[i].color1).replace("__C2__", this.dotElements[i].color2).
-						replace("__WIDTH__", w * this.gscalar).replace("__HEIGHT__", h * this.gscalar);
+						replace("__WIDTH__", size * this.gscalar).replace("__HEIGHT__", size * this.gscalar);
 
 					img = this.dotImages[i] = new Image();
-					img.width = w * this.gscalar;
-					img.height = h * this.gscalar;
+					img.width = size * this.gscalar;
+					img.height = size * this.gscalar;
 					this.dotImages[i].isImgLoaded = false;
 					(f=function(i){
 						self.dotImages[i].onload = function() { self.dotImages[i].isImgLoaded = true; };
@@ -130,10 +139,10 @@ function gcpdot_initialize(id)
 					//element.appendChild(this.dotImages[i]);
 					if(i == 0) {
 						svg = this.shadowSVG.replace("__SHADOWBLUR__", shadowBlur).replace("__SHADOWBLUR__", shadowBlur).
-						replace("__WIDTH__", w * this.gscalar).replace("__HEIGHT__", h * this.gscalar);
+						replace("__WIDTH__", size * this.gscalar).replace("__HEIGHT__", size * this.gscalar);
 						img = this.shadowImage = new Image();
-						img.width = w * this.gscalar;
-						img.height = h * this.gscalar;
+						img.width = size * this.gscalar;
+						img.height = size * this.gscalar;
 						this.shadowImage.isImgLoaded = false;
 						this.shadowImage.onload = function() {
 							self.shadowImage.isImgLoaded = true;
@@ -152,20 +161,21 @@ function gcpdot_initialize(id)
 					return;
 
 				var w = this.element.offsetWidth, h = this.element.offsetHeight;
+				var size = this.size, ox = this.offsetX, oy = this.offsetY;
 				this.context.save();
 				this.context.fillStyle = 'rgba(255, 255, 255, 0)';
 				this.context.clearRect(0, 0, w, h);
 				this.context.globalAlpha = 1.0;
-				this.context.drawImage(this.shadowImage, 0, 0, this.shadowImage.width, this.shadowImage.height, 0, 0, w, h);
+				this.context.drawImage(this.shadowImage, 0, 0, this.shadowImage.width, this.shadowImage.height, ox, oy, size, size);
 
 				var time = Date.now();
 				var scale = (time % this.animateTime) / this.animateTime;
-				this.context.drawImage(this.dotImages[0], 0, 0, this.dotImages[0].width, this.dotImages[0].height, 0, 0, w, h);
+				this.context.drawImage(this.dotImages[0], 0, 0, this.dotImages[0].width, this.dotImages[0].height, ox, oy, size, size);
 				for(var i = 0; i < 6; i++)
 				{
 					this.context.fillStyle = 'rgba(255, 255, 255, ' + this.animateScalar(scale - i/6) + ')';
 					this.context.beginPath();
-					this.context.arc((w*0.83)/6 * i + w * 0.15, h * 0.455, w * 0.038, 0, Math.PI*2, true);
+					this.context.arc(ox + (size*0.83)/6 * i + size * 0.15, oy + size * 0.455, size * 0.038, 0, Math.PI*2, true);
 					this.context.closePath();
 					this.context.fill();
 				}
@@ -187,16 +197,17 @@ function gcpdot_initialize(id)
 				this.lastKey = key;
 
 				var w = this.element.offsetWidth, h = this.element.offsetHeight;
+				var size = this.size, ox = this.offsetX, oy = this.offsetY;
 				this.context.save();
 				this.context.fillStyle = 'rgba(255, 255, 255, 0)';
 				this.context.clearRect(0, 0, w, h);
 				this.context.globalAlpha = 1.0;
-				this.context.drawImage(this.shadowImage, 0, 0, this.shadowImage.width, this.shadowImage.height, 0, 0, w, h);
+				this.context.drawImage(this.shadowImage, 0, 0, this.shadowImage.width, this.shadowImage.height, ox, oy, size, size);
 
-				this.context.drawImage(imgFrom, 0, 0, imgFrom.width, imgFrom.height, 0, 0, w, h);
+				this.context.drawImage(imgFrom, 0, 0, imgFrom.width, imgFrom.height, ox, oy, size, size);
 				if(fromIndex !== toIndex && progress > 0) {
 					this.context.globalAlpha = progress;
-					this.context.drawImage(imgTo, 0, 0, imgTo.width, imgTo.height, 0, 0, w, h);
+					this.context.drawImage(imgTo, 0, 0, imgTo.width, imgTo.height, ox, oy, size, size);
 				}
 				this.context.restore();
 			},
