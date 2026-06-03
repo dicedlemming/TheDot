@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NetVar Dashboard</title>
+</head>
+<body>
+  <h1>Current NetVar</h1>
+  <div id="value">Loading...</div>
+
+  <script>
+    const bearer = 'Bearer 5|M1bz2cXL3YLdmuArrI2KaySF0Cl8UxtiDznzK7Mk';
+
+    async function updateNetVar() {
+      try {
+        const res = await fetch('https://gcp2.net/api/getcurrentnetvar', {
+          headers: {
+            Authorization: bearer
+          }
+        });
+
+        const data = await res.json();
+        const value = data.netvar?.[0]?.netvar;
+
+        document.getElementById('value').innerText = value;
+      } catch (err) {
+        document.getElementById('value').innerText = 'Error';
+        console.error(err);
+      }
+    }
+
+    updateNetVar();
+    setInterval(updateNetVar, 30000); // every 30 seconds
+  </script>
+</body>
+</html>
