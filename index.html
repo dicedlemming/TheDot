@@ -27,11 +27,11 @@ function mapNetvarToBand(netvar)
 {
 	var v = parseFloat(netvar);
 	if (isNaN(v)) return null;
-	if (v < 7)   return 12;
-	if (v < 15)   return 10;
-	if (v <= 100) return 8;
-	if (v <= 160) return 5;
-	if (v <= 200) return 3;
+	if (v < 10)   return 12;
+	if (v < 20)   return 10;
+	if (v <= 90) return 8;
+	if (v <= 140) return 5;
+	if (v <= 180) return 3;
 	if (v <= 280) return 2;
 	return 14;
 }
